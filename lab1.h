@@ -58,3 +58,4 @@ void printDigit(Digit digit);
 void printDecimal(Decimal number);
 
 char* getTableForNumberSystem();
+char* multiplyCharNumbers(char* charNumber1, char* charNumber2);

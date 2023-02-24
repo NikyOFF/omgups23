@@ -1,12 +1,20 @@
 #include "lab1.h"
 
 void main() {
-    FILE* file = fopen(OUTPUT_FILE_PATH, "w+");
+    Decimal decimal1 = 24;
+    Decimal decimal2 = 2;
 
-    assert(file != NULL);
+    char* charDigit1 = decimalToCharNumber(decimal1);
+    char* charDigit2 = decimalToCharNumber(decimal2);
+    
+    multiplyCharNumbers(charDigit1, charDigit2);
 
-    fprintf(file, getTableForNumberSystem());
-    fclose(file);
+    // FILE* file = fopen(OUTPUT_FILE_PATH, "w+");
+
+    // assert(file != NULL);
+
+    // fprintf(file, getTableForNumberSystem());
+    // fclose(file);
 }
 
 
@@ -225,7 +233,7 @@ char* decimalToCharNumber(Decimal decimal) {
         buffer[index++] = digitToChar(currentDecimal % NUMBER_SYSTEM); //get current decimal in number system and convert at to digit
         currentDecimal /= NUMBER_SYSTEM; //divide the number by number system
     }
-
+    
     //if decimal is negative
     if (isNegativeNumber(decimal)) {
         char* reversedString = reverseString(buffer); //reverse string, function return new allocated memory
@@ -314,4 +322,65 @@ void printDecimal(Decimal decimal) {
     free(charNumber); //free allocated 
     printf("\n"); //print next line
 }
+
+unsigned int multiplyChardigits(char charDigit1, char charDigit2) {
+    unsigned int correctDigit1 = (unsigned int)(charToDigit(charDigit1));
+    unsigned int correctDigit2 = (unsigned int)charToDigit((charDigit2));
+
+    return correctDigit1 * correctDigit2;
+}
+
+char* multiplyCharNumbers(char* charNumber1, char* charNumber2) {
+    size_t charNumber1Length = strlen(charNumber1);
+    size_t charNumber2Length = strlen(charNumber2);
+    unsigned int result = 0;
+
+    for (size_t charNumberIndex1 = 0; charNumberIndex1 < charNumber1Length; charNumberIndex1++) {
+        size_t reversedIndex1 = charNumber1Length - charNumberIndex1 - 1;
+        char digit1 = charNumber1[reversedIndex1];
+
+        if (digit1 == '0') {
+            continue;
+        }
+
+        Boolean outSystem = FALSE;
+        unsigned long resultForChar = 0;
+
+        for (size_t charNumberIndex2 = 0; charNumberIndex2 < charNumber2Length; charNumberIndex2++) {
+            Boolean newSystem = outSystem;
+            outSystem = FALSE;
+
+            size_t reversedIndex2 = charNumber2Length - charNumberIndex2 - 1;
+            char digit2 = charNumber2[reversedIndex2];
+
+            unsigned long a = charToDigit(digit1);
+            unsigned long b = charToDigit(digit2);
+            unsigned long multiplyResult = (a * b) + newSystem ? 1 : 0;
+
+            if (multiplyResult > NUMBER_SYSTEM) {
+                outSystem = TRUE;
+                multiplyResult -= NUMBER_SYSTEM;
+            }
+
+            resultForChar += multiplyResult;
+        }
+
+        result += resultForChar;
+    }
+
+    /*
+    
+    156
+     12
+    ---
+    312
+    
+    
+
+    
+    */
+
+    // return result;
+}
+
 #pragma endregion
