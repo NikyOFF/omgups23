@@ -1,6 +1,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
+#include <sys/time.h>
+#include <string.h>
 
 //helpers
 #define __OUT__
@@ -30,9 +32,9 @@ Boolean SORT_FROM_THE_END = VARIANT & 0x01;
 //random array options
 #define MAX_RANDOM_ARRAY_VALUE 100
 
-#define MAX_RANDOM_ARRAY_LENGTH 1000
+#define MAX_RANDOM_ARRAY_LENGTH 100
 #define FIXED_RANDOM_ARRAY_LENGTH_ENABLED TRUE
-#define FIXED_RANDOM_ARRAY_LENGTH 1000
+#define FIXED_RANDOM_ARRAY_LENGTH 100
 
 typedef struct SubArraysStruct {
     int* array1;
@@ -50,6 +52,10 @@ SubArrays* splitArray(int* array, size_t length);
 int* copyArray(int* array, size_t length);
 int* randomIntArray(__OUT__ size_t* length);
 
+size_t getStringLength(char* string);
+
 //sort
 int* mergeSort(int* array, size_t length);
 int* selectionSort(int* array, size_t length);
+
+char* mergeSortForString(char* array, size_t length);

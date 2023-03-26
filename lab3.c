@@ -1,8 +1,6 @@
 #include "lab3.h"
 
 
-#include <sys/time.h>
-
 int* copyArray(int* array, size_t length) {
     int* newArray = calloc(length, sizeof(int));
 
@@ -91,6 +89,62 @@ void main() {
     free(arrayLength); //free allocated memory for arrayLength
     free(array); //free allocated memory for array
     free(sortedArray); //free allocated memory for sortedArray
+
+
+    //main task
+    printf("\n\n");
+
+    #define STRING_ARRAY_LENGTH 6
+
+    char* stringArray[] = {
+        "avtor",
+        "tovar",
+        "otvar",
+        "apelsin",
+        "spaniel",
+        "toavr"
+    };
+
+    char** sortedStringArray = calloc(STRING_ARRAY_LENGTH, sizeof(stringArray));
+
+    for (size_t index = 0; index < STRING_ARRAY_LENGTH; index++) {
+        char* stringArrayItem = stringArray[index];
+        size_t stringLength = getStringLength(stringArrayItem);
+
+        sortedStringArray[index] = mergeSortForString(stringArrayItem, stringLength);
+    }
+
+    Boolean* checkedStrings = calloc(STRING_ARRAY_LENGTH, sizeof(Boolean));
+
+    for (size_t index = 0; index < STRING_ARRAY_LENGTH; index++) {
+        if (checkedStrings[index] == TRUE) {
+            continue;
+        }
+
+        char* currentString = sortedStringArray[index];
+        Boolean finded = FALSE;
+
+        for (size_t internalIndex = index + 1; internalIndex < STRING_ARRAY_LENGTH; internalIndex++) {
+            char* nextString = sortedStringArray[internalIndex];
+
+            if (strcmp(currentString, nextString) == 0) {
+                if (!finded) {
+                    printf("%s", stringArray[index]);
+                }
+
+                printf(" -- %s", stringArray[internalIndex]);
+
+                finded = TRUE;
+                checkedStrings[internalIndex] = TRUE;
+            }
+        }
+
+        if (finded) {
+            printf(";\n");
+        }
+    }
+
+    free(sortedStringArray);
 }
 
 #pragma region implementations
@@ -231,6 +285,25 @@ int* mergeSort(int* array, size_t length) {
     return resultArray;
 }
 
+char* mergeSortForString(char* string, size_t length) {
+    int* intArray = calloc(length, sizeof(int)); //allocate memory for int array
+
+    for (size_t index = 0; index < length; index++) {
+        intArray[index] = 0 + string[index];
+    }
+
+    int* sortedIntArray = mergeSort(intArray, length);
+
+    char* resultString = calloc(length, sizeof(char));
+    resultString[length - 1] = '\n';
+
+    for (size_t index = 0; index < length; index++) {
+        resultString[index] = (char)(sortedIntArray[index]);
+    }
+
+    return resultString;
+}
+
 //generate random int array
 int* randomIntArray(__OUT__ size_t* length) {
     srand(time(0)); //set random seed
@@ -243,5 +316,14 @@ int* randomIntArray(__OUT__ size_t* length) {
     }
 
     return array;
+}
+
+//get string length
+size_t getStringLength(char* string) {
+    size_t result = 0;
+
+    for (; string[result] != '\0'; ++result);
+
+    return result;
 }
 #pragma endregion
