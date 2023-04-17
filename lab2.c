@@ -1,19 +1,14 @@
+/*
+YAKOVLEV NIKOLAI, 22M, INDEX: 30
+VARIANTS: 14, 6
+*/
+
 #include "lab2.h"
 
 
 void main() {
-    printf("Main task\n");
-
-    double result = 0;
-
-    for (size_t n = 0; result < END_VALUE - EPS; n++) {
-        double temp = 1.0 / pow(2, n);
-
-        result += temp;
-        printf("[%zu]: temp = %f (1 / 2**%zu), result = %f\n", n, temp, n, result);
-    }
-
-    task7();
+    mainTask();
+    task6();
 }
 
 int* randomIntArray(__OUT__ size_t* length) {
@@ -31,27 +26,53 @@ int* randomIntArray(__OUT__ size_t* length) {
     return array;
 }
 
-void task7() {
-    printf("\n\ntask7\n");
+void mainTask() {
+    printf("Main task (variant 14)\n");
+    //task1
+
+    const double EXPECTED_RESULT = 1.08232;
+    double result = 0;
+
+    for (size_t n = 1; result < EXPECTED_RESULT - EPS; n++) {
+        double temp = 1.0 / pow(n, 4);
+
+        result += temp;
+    }
+
+    printf("current result  = %f\n", result);
+    printf("expected result = %f\n", EXPECTED_RESULT);
+    printf("error rate      = %.2f%%", (EXPECTED_RESULT - result) * 100);
+
+    //task2
+    /*
+    * NOT IMPLEMENTED
+    * idk math :D
+    */
+}
+
+void task6() {
+    printf("\n\nSubtask (variant 6)\n");
 
     size_t* arrayLength = malloc(sizeof(size_t)); //allocate memory for array length
     int* array = randomIntArray(arrayLength); //generate random int array
 
-    long int sum = 0;
-    size_t counter = 0;
+    size_t counter = 0; //define counter for count local mins
 
     for (size_t index = 0; index < *arrayLength; index++) {
-        int arrayItem = array[index];
+        int arrayItem = array[index]; //get current array item by index
 
-        if (arrayItem > sum) {
+        //check loop start, end and common cases
+        if (
+            (index == 0 && arrayItem < array[index + 1]) ||
+            (index == (*arrayLength) - 1 && arrayItem < array[index - 1]) ||
+            (arrayItem < array[index - 1] && arrayItem < array[index + 1])
+        ) {
             counter++;
-            printf("[%i]: %i (sum = %li)\n", index, arrayItem, sum);
-        }
-        else {
-            printf("[%i]: %i\n", index, arrayItem);
+            printf("%i - min\n", arrayItem);
+            continue;
         }
 
-        sum += arrayItem;
+        printf("%i\n", arrayItem);
     }
 
     printf("\ncount: %i\n", counter);
