@@ -13,8 +13,6 @@ Unit* Unit_constructor(Power power) {
 }
 
 Unit* Unit_createRandom(Power minPower, Power maxPower) {
-    srand(time(0));
-
     Power fixedMinPower = minPower == 0 ? 1 : minPower;
     Power randomPower = (rand() % maxPower == 0 ? 1 : maxPower);
 
@@ -22,6 +20,7 @@ Unit* Unit_createRandom(Power minPower, Power maxPower) {
         
 
     unit->power = randomPower < fixedMinPower ? fixedMinPower : randomPower;
+    unit->isDead = FALSE;
 
     return unit;
 }
@@ -36,6 +35,9 @@ GameContext* GameContext_constructor(Scene scene) {
     gameContext->version = GAME_VERSION;
     gameContext->state = ProcessGameState;
     gameContext->scene = scene;
+    gameContext->teams = NULL;
+    gameContext->teamCount = 0;
+    gameContext->lossTeamFlags = 0;
 
     return gameContext;
 }
@@ -55,6 +57,33 @@ char* GameContext_debug_string() {
     return debugString;
 }
 
+#pragma endregion
+
+#pragma team
+Team* Team_constructor(size_t index, Unit* units, size_t size, Boolean derivedByBot) {
+    Team* team = malloc(sizeof(Team));
+
+    team->index = index;
+    team->units = units;
+    team->size = size;
+    team->derivedByBot = derivedByBot;
+
+    return team;
+}
+
+size_t Team_getAvailableUnitCount(Team team) {
+    size_t counter = 0;
+
+    for (size_t index = 0; index < team.size; index++) {
+        if (team.units[index].isDead) {
+            continue;
+        }
+
+        counter++;
+    }
+
+    return counter;
+}
 #pragma endregion
 
 #pragma region utils
@@ -223,12 +252,80 @@ void initializeGame() {
 void setScene(Scene scene) {
     debug("[Game::setScene]: set new scene \"%s\" ("SCENE_FORMAT")", getSceneName(scene), scene);
     GameContext_setScene(&GAME_CONTEXT, scene);
-
 }
 #pragma endregion
 
-void mainMenuLoop() {
+Boolean randomBoolean() {
+    return rand() % 2;
+}
 
+Boolean randomBooleanWithPrefer(char prefer; unsigned char max) {
+    return rand() % (max < 3 ? 3 : max) < prefer + (max / 2);
+}
+
+Boolean teamIsLoss(Team team) {
+    return GAME_CONTEXT.lossTeamFlags & 0x1 << team.index == 0;
+}
+
+AutoSelectUnitResult autoSelectUnit(__IN__ Team team, __OUT__ Unit *unit) {
+    if (team.size == 0) {
+        return TEAM_EMPTY_AUTO_SELECT_UNIT_RESULT;
+    }
+
+    if (teamIsLoss(team)) {
+        return TEAM_LOSS_AUTO_SELECT_UNIT_RESULT;
+    }
+    
+    Unit selectedUnit = team.units[0];
+    
+    for (size_t index = 1; index < team.size; index++) {
+        Unit currentUnit = team.units[index];
+
+        if (currentUnit.power > selectedUnit.power) {
+            selectedUnit = currentUnit;
+        }
+    }
+
+    unit = &selectedUnit;
+    return SUCCESS_AUTO_SELECT_UNIT_RESULT;
+}
+
+AutoSelectEnemyTeamResult autoSelectEnemyTeam(Team team, Team *enemyTeam) {
+    size_t currentAvailableUnitCountInEnemyTeam = 0;
+
+    for (size_t index = 0; index < GAME_CONTEXT.teamCount; index++) {
+        if (team.index == index) {
+            continue;
+        }
+
+        Team currentTeam = GAME_CONTEXT.teams[index];
+        
+        if (enemyTeam == NULL) {
+            enemyTeam = &currentTeam;
+            currentAvailableUnitCountInEnemyTeam = Team_getAvailableUnitCount(currentTeam);
+            continue;
+        }
+
+        if (!randomBooleanWithPrefer(-2, 2)) {
+            break;
+        }
+
+        size_t availableUnitCount = Team_getAvailableUnitCount(currentTeam);
+
+        if (
+            (availableUnitCount < currentAvailableUnitCountInEnemyTeam) ||
+            (availableUnitCount == currentAvailableUnitCountInEnemyTeam && randomBoolean())
+        ) {
+            enemyTeam = &currentTeam;
+            currentAvailableUnitCountInEnemyTeam = availableUnitCount;
+            continue;
+        }
+    }
+
+    return SUCCES_AUTO_SELECT_ENEMY_TEAM;
+}
+
+void mainMenuLoop() {
     typedef unsigned char MainMenuState;
     #define WelcomeMainMenuState 0
     #define NewGameMainMenuState 1
@@ -238,6 +335,7 @@ void mainMenuLoop() {
     unsigned char userAnswer = 0;
 
     while(TRUE) {
+
         switch (state) {
             case WelcomeMainMenuState:
                 printf("Welcome to \"The Teams game\"!\n");
@@ -289,6 +387,57 @@ void mainMenuLoop() {
     }
 }
 
+void gameProcessLoop() {
+    if (GAME_CONTEXT.teamCount == 0) {
+        warn("Trying start game without teams\n");
+        setScene(MAIN_MENU_SCENE);
+        return;
+    }
+
+    for (size_t index = 0; index < GAME_CONTEXT.teamCount; index++) {
+        Team team = GAME_CONTEXT.teams[index];
+
+        if (teamIsLoss(team)) {
+            continue;
+        }
+
+        if (team.derivedByBot) {
+            printf("[bot %zu]: selecting unit...\n");
+            Unit currentUnit;
+            AutoSelectUnitResult autoSelectUnitResult = autoSelectUnit(team, &currentUnit);
+
+            if (autoSelectUnit != SUCCESS_AUTO_SELECT_UNIT_RESULT) {
+                printf("[bot %zu]: unit selection canceled\n");
+                continue;
+            }
+
+            printf("[bot %zu]: selecting team to attack...\n");
+            Team enemyTeam;
+            AutoSelectEnemyTeamResult autoSelectEnemyTeamResult = autoSelectEnemyTeam(team, &enemyTeam);
+
+            if (autoSelectEnemyTeamResult != SUCCES_AUTO_SELECT_ENEMY_TEAM) {
+                printf("[bot %zu]: team selection canceled\n");
+                continue;
+            }
+
+            printf("[bot %zu]: selecting unit to attack...\n");
+            Unit unitToAttack;
+            AutoSelectEnemyUnitResult autoSelectEnemyUnitResult = autoSelectEnemyUnit(enemyTeam, &unitToAttack);
+
+            if (autoSelectEnemyUnitResult != SUCCESS_AUTO_SELECT_ENEMY_UNIT_RESULT) {
+                printf("[bot %zu]: unit selection canceled\n");
+                continue;
+            }
+
+            //attack(currentUnit, unitToAttack);
+        }
+
+        //user 
+    }
+
+
+}
+
 void gameLoop() {
 
     while (GAME_CONTEXT.state != ExitGameState) {
@@ -296,6 +445,10 @@ void gameLoop() {
         switch (GAME_CONTEXT.scene) {
             case MAIN_MENU_SCENE:
                 mainMenuLoop();
+                break;
+            case GAME_PROCESS_SCENE:
+                gameProcessLoop();
+                break;
         }
 
     }
@@ -303,6 +456,7 @@ void gameLoop() {
 }
 
 void main() {
+    srand(time(0));
     initializeGame();
     gameLoop();
     exitGame(GAME_STOPED_EXIT_REASON, TRUE);
