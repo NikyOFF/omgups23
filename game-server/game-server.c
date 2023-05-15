@@ -106,7 +106,7 @@ int rpcCreateGameServer(SOCKET socket, char* serverName, GameServer* outGameServ
     return 0;
 }
 
-int rpcGetGameServers(SOCKET socket, size_t* outSize, GameServer** outGameServers) {
+int rpcGetGameServers(SOCKET socket, size_t* outSize, GameServer*** outGameServers) {
     int iResult;
 
     Binary binary = *Binary_constructor(512);
@@ -127,11 +127,13 @@ int rpcGetGameServers(SOCKET socket, size_t* outSize, GameServer** outGameServer
 
     Binary_readSizeT(&binary, outSize);
 
-    outGameServers = calloc(*outSize, sizeof(GameServer));
+    GameServer** gameServers = calloc(*outSize, sizeof(GameServer));
 
     for (size_t index = 0; index < *outSize; index++) {
-        outGameServers[index] = Binary_readGameServer(&binary);
+        gameServers[index] = Binary_readGameServer(&binary);
     }
+
+    *outGameServers = gameServers;
 
     return -1;
 }

@@ -3,7 +3,7 @@
 
 #define MOVE_CURSOR_TO_HOME printf("\x1b[H")
 #define MOVE_CURSOR_TO_XY(line, column) printf("\x1b[%i;%iH", line, column)
-#define MOVE_CURSOR_UP(value) printf("\x1b[%iA", value)
+#define MOVE_CURSOR_UP(value) printf("\x1b[%zuA", value)
 #define MOVE_CURSOR_DOWN(value) printf("\x1b[%iB", value)
 #define MOVE_CURSOR_RIGHT(value) printf("\x1b[%iC", value)
 #define MOVE_CURSOR_LEFT(value) printf("\x1b[%iD", value)

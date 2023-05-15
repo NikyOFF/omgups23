@@ -22,7 +22,7 @@ void Binary_writeGameServer(Binary* binary, GameServer* gameServer);
 GameServer* Binary_readGameServer(Binary* binary);
 
 int rpcCreateGameServer(SOCKET socket, char* serverName, GameServer* outGameServer);
-int rpcGetGameServers(SOCKET socket, size_t* outSize, GameServer** outGameServers);
+int rpcGetGameServers(SOCKET socket, size_t* outSize, GameServer*** outGameServers);
 int rpcConnectionToServer(SOCKET socket, size_t serverId);
 
 #endif //GAME_SERVER_H

@@ -16,18 +16,21 @@ SOCKET CLIENT_SOCKET = INVALID_SOCKET;
 
 
 #define SERVER_SCENE 2
-#define SINGLEPLAYER_SCENE 20
+
+#define PVE_SINGLEPLAYER_SCENE 20
+
+#define PVP_SINGLEPLAYER_SCENE 30
+
 
 size_t CURRENT_SCENE = MAIN_MENU_SCENE;
 size_t CURRENT_MENU = MAIN_MENU_MENU;
 User CURRENT_USER;
+GameServer CURRENT_GAME_SERVER;
 
 
 void handleSocketError() {
 
 }
-
-
 
 void printfWithColor(const WORD wAttributes, const char* format, ...) {
     HANDLE consoleOutput = GetStdHandle(STD_OUTPUT_HANDLE);
@@ -40,7 +43,7 @@ void printfWithColor(const WORD wAttributes, const char* format, ...) {
     SetConsoleTextAttribute(consoleOutput, 7);
 }
 
-void printSelectMenu(char** items, size_t itemsSize, int selectedIndex) {
+void printSelectMenu(char** items, size_t itemsSize, size_t selectedIndex) {
 
     for (size_t index = 0; index < itemsSize; index++) {
         char* item = items[index];
@@ -58,7 +61,6 @@ void printSelectMenu(char** items, size_t itemsSize, int selectedIndex) {
     }
 
 }
-
 
 int connectToServer() {
     int iResult;
@@ -106,9 +108,6 @@ int connectToServer() {
     printf("[main] Connection established SUCCESSFULLY. Ready to send a message to Server\n\n");
     return 0;
 }
-
-
-
 
 int receiveServerPacket(SOCKET socket, Binary* serverPacket, int flags) {
     size_t defaultReadIndex = serverPacket->readIndex;
@@ -189,8 +188,8 @@ int processAuth(User* outUser) {
 
 void selectServerIteration() {
     size_t gameServersSize;
-    GameServer** gameServers;
-    int iResult = rpcGetGameServers(CLIENT_SOCKET, &gameServersSize, gameServers);
+    GameServer** gameServers = NULL;
+    int iResult = rpcGetGameServers(CLIENT_SOCKET, &gameServersSize, &gameServers);
 
     if (iResult == 2) {
         printf("Error\n");
@@ -201,7 +200,7 @@ void selectServerIteration() {
     if (iResult == 1) {
         printf("Cannot get game servers\n");
         Sleep(3000);
-        MOVE_CURSOR_UP(1);
+        MOVE_CURSOR_UP(1llu);
         ERASE_FROM_CURSOR_UNTIL_END_OF_SCREEN;
 
         CURRENT_MENU = START_NEW_GAME_MENU;
@@ -211,76 +210,24 @@ void selectServerIteration() {
     if (gameServersSize == 0) {
         printf("No available servers\n");
         Sleep(3000);
-        MOVE_CURSOR_UP(1);
+        MOVE_CURSOR_UP(1llu);
         ERASE_FROM_CURSOR_UNTIL_END_OF_SCREEN;
 
         CURRENT_MENU = START_NEW_GAME_MENU;
         return;
     }
 
-//    size_t itemsSize = gameServersSize + 1;
-//    char* items = calloc(1, (sizeof(char) * 100) * itemsSize);
+    size_t itemsSize = gameServersSize + 1;
+    char** items = calloc(itemsSize, (sizeof(char*)));
 
     for (size_t index = 0; index < gameServersSize; index++) {
-        GameServer* gameServer = gameServers[index];
-        printf("serverName=%s\n",gameServer->serverName);
-//        strcpy(&items[index], gameServer->serverName);
+        char* item = calloc(1, sizeof(char) * 100);
+        sprintf(item, "server \"%s\" (id:%zu)", gameServers[index]->serverName, gameServers[index]->id);
+        items[index] = item;
     }
 
-    CURRENT_SCENE = EXIT_SCENE;
-    return;
-
-//    strcpy(&items[gameServersSize], "back");
-//
-//    int selectedIndex = 0;
-//
-//    while(1) {
-//        printSelectMenu(items, itemsSize, selectedIndex);
-//        MOVE_CURSOR_UP(itemsSize);
-//
-//        switch(getch()) {
-//            case 'w':
-//            case 72:
-//                selectedIndex = selectedIndex - 1 < 0 ? itemsSize - 1 : selectedIndex - 1;
-//                break;
-//            case 's':
-//            case 80:
-//                selectedIndex = selectedIndex + 1 >= itemsSize ? 0 : selectedIndex + 1;
-//                break;
-//            case '\n':
-//            case 13:
-//            case 100:
-//                ERASE_FROM_CURSOR_UNTIL_END_OF_SCREEN;
-//
-//                if (selectedIndex == 0) {
-//                    iResult = rpcConnectionToServer(CLIENT_SOCKET, 0);
-//
-//                    if (iResult == 0) {
-//                        CURRENT_SCENE = SERVER_SCENE;
-//                    }
-//
-//                    if (iResult == 1) {
-//                        printf("Cannot connect to server\n");
-//                        Sleep(3000);
-//                        MOVE_CURSOR_UP(1);
-//                        ERASE_FROM_CURSOR_UNTIL_END_OF_SCREEN;
-//                    }
-//
-//                    if (iResult == 2) {
-//                        CURRENT_SCENE = EXIT_SCENE;
-//                        return;
-//                    }
-//                }
-//
-//                return;
-//        }
-//    }
-}
-
-void multiplayerMenuIteration() {
-    const char* items[3] = {"create server", "select server", "back"};
-    size_t itemsSize = 3;
-    int selectedIndex = 0;
+    items[gameServersSize] = "back";
+    size_t selectedIndex = 0;
 
     while(1) {
         printSelectMenu(items, itemsSize, selectedIndex);
@@ -289,7 +236,46 @@ void multiplayerMenuIteration() {
         switch(getch()) {
             case 'w':
             case 72:
-                selectedIndex = selectedIndex - 1 < 0 ? itemsSize - 1 : selectedIndex - 1;
+                selectedIndex = selectedIndex == 0 ? gameServersSize : selectedIndex - 1;
+                break;
+            case 's':
+            case 80:
+                selectedIndex = selectedIndex + 1 >= itemsSize ? 0 : selectedIndex + 1;
+                break;
+            case '\n':
+            case 13:
+            case 100:
+                ERASE_FROM_CURSOR_UNTIL_END_OF_SCREEN;
+
+                if (selectedIndex < gameServersSize) {
+                    memcpy(&CURRENT_GAME_SERVER, gameServers[selectedIndex], sizeof(GameServer));
+                    CURRENT_SCENE = SERVER_SCENE;
+                }
+                else if (selectedIndex == gameServersSize) {
+                    CURRENT_MENU = MULTIPLAYER_MENU;
+                }
+
+                free(gameServers);
+                free(items);
+
+                return;
+        }
+    }
+}
+
+void multiplayerMenuIteration() {
+    char* items[3] = {"create server", "select server", "back"};
+    size_t itemsSize = 3;
+    size_t selectedIndex = 0;
+
+    while(1) {
+        printSelectMenu(items, itemsSize, selectedIndex);
+        MOVE_CURSOR_UP(itemsSize);
+
+        switch(getch()) {
+            case 'w':
+            case 72:
+                selectedIndex = selectedIndex == 0 ? 0 : selectedIndex - 1;
                 break;
             case 's':
             case 80:
@@ -337,10 +323,10 @@ void multiplayerMenuIteration() {
     }
 }
 
-void startNewGameMenuIteration() {
-    const char* items[3] = {"singlplayer", "multiplayer", "back"};
+void singleplayerMenuIteration() {
+    char* items[3] = {"play vs environment", "player vs player", "back"};
     size_t itemsSize = 3;
-    int selectedIndex = 0;
+    size_t selectedIndex = 0;
 
     while(1) {
         printSelectMenu(items, itemsSize, selectedIndex);
@@ -349,7 +335,45 @@ void startNewGameMenuIteration() {
         switch(getch()) {
             case 'w':
             case 72:
-                selectedIndex = selectedIndex - 1 < 0 ? itemsSize - 1 : selectedIndex - 1;
+                selectedIndex = selectedIndex == 0 ? 0 : selectedIndex - 1;
+                break;
+            case 's':
+            case 80:
+                selectedIndex = selectedIndex + 1 >= itemsSize ? 0 : selectedIndex + 1;
+                break;
+            case '\n':
+            case 13:
+            case 100:
+                ERASE_FROM_CURSOR_UNTIL_END_OF_SCREEN;
+
+                if (selectedIndex == 0) {
+                    CURRENT_SCENE = PVE_SINGLEPLAYER_SCENE;
+                }
+                else if (selectedIndex == 1) {
+                    CURRENT_SCENE = PVP_SINGLEPLAYER_SCENE;
+                }
+                else if (selectedIndex == 2) {
+                    CURRENT_MENU = START_NEW_GAME_MENU;
+                }
+
+                return;
+        }
+    }
+}
+
+void startNewGameMenuIteration() {
+    char* items[3] = {"singlplayer", "multiplayer", "back"};
+    size_t itemsSize = 3;
+    size_t selectedIndex = 0;
+
+    while(1) {
+        printSelectMenu(items, itemsSize, selectedIndex);
+        MOVE_CURSOR_UP(itemsSize);
+
+        switch(getch()) {
+            case 'w':
+            case 72:
+                selectedIndex = selectedIndex == 0 ? 0 : selectedIndex - 1;
                 break;
             case 's':
             case 80:
@@ -363,12 +387,10 @@ void startNewGameMenuIteration() {
                 if (selectedIndex == 0) {
                     CURRENT_MENU = SINGLEPLAYER_MENU;
                 }
-
-                if (selectedIndex == 1) {
+                else if (selectedIndex == 1) {
                     CURRENT_MENU = MULTIPLAYER_MENU;
                 }
-
-                if (selectedIndex == 2) {
+                else if (selectedIndex == 2) {
                     CURRENT_MENU = MAIN_MENU_MENU;
                 }
 
@@ -384,9 +406,9 @@ void statisticsMenuIteration() {
     char defeatsItem[20];
     sprintf(defeatsItem, "defeats: %zu", CURRENT_USER.defeats);
 
-    const char* items[3] = {winsItem, defeatsItem, "back"};
+    char* items[3] = {winsItem, defeatsItem, "back"};
     size_t itemsSize = 3;
-    int selectedIndex = 0;
+    size_t selectedIndex = 0;
 
     while(1) {
         printSelectMenu(items, itemsSize, selectedIndex);
@@ -395,7 +417,7 @@ void statisticsMenuIteration() {
         switch(getch()) {
             case 'w':
             case 72:
-                selectedIndex = selectedIndex - 1 < 0 ? itemsSize - 1 : selectedIndex - 1;
+                selectedIndex = selectedIndex == 0 ? 0 : selectedIndex - 1;
                 break;
             case 's':
             case 80:
@@ -417,9 +439,9 @@ void statisticsMenuIteration() {
 void logoutMenuIteration() {}
 
 void mainMenuIteration() {
-    const char* items[4] = {"New game", "Statistic", "Logout", "Exit"};
+    char* items[4] = {"New game", "Statistic", "Logout", "Exit"};
     size_t itemsSize = 4;
-    int selectedIndex = 0;
+    size_t selectedIndex = 0;
 
     while(1) {
         printSelectMenu(items, itemsSize, selectedIndex);
@@ -428,7 +450,7 @@ void mainMenuIteration() {
         switch(getch()) {
             case 'w':
             case 72:
-                selectedIndex = selectedIndex - 1 < 0 ? itemsSize - 1 : selectedIndex - 1;
+                selectedIndex = selectedIndex == 0 ? 0 : selectedIndex - 1;
                 break;
             case 's':
             case 80:
@@ -469,7 +491,7 @@ void mainMenuSceneIteration() {
             startNewGameMenuIteration();
             break;
         case SINGLEPLAYER_MENU:
-
+            singleplayerMenuIteration();
             break;
         case MULTIPLAYER_MENU:
             multiplayerMenuIteration();
@@ -487,7 +509,7 @@ void mainMenuSceneIteration() {
 }
 
 int main() {
-    system("cls");
+    ERASE_DISPLAY;
 
     printf(" ________  ________  _____ ______   _______           ________  ________      _________  ___  ___  _______           _________  _______   ________  _____ ______   ________      \n"
            "|\\   ____\\|\\   __  \\|\\   _ \\  _   \\|\\  ___ \\         |\\   __  \\|\\  _____\\    |\\___   ___\\\\  \\|\\  \\|\\  ___ \\         |\\___   ___\\\\  ___ \\ |\\   __  \\|\\   _ \\  _   \\|\\   ____\\     \n"
@@ -499,14 +521,14 @@ int main() {
            "                                                                                                                                                                     \\|_________|\n");
 
     printf(
-            "------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------\n"
-            "Created by nikyoff for omgups 2023 -- https://github.com/NikyOFF/omgups23/tree/assignment\n"
-            "------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------\n\n\n"
-            );
+        "------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------\n"
+        "Created by nikyoff for omgups 2023 -- https://github.com/NikyOFF/omgups23/tree/assignment\n"
+        "------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------\n\n\n"
+    );
 
     printf("Press any button to start!\n");
     getch();
-    MOVE_CURSOR_UP(1);
+    MOVE_CURSOR_UP(1llu);
 
     int iResult;
     iResult = connectToServer();
@@ -515,7 +537,6 @@ int main() {
         exit(0);
     }
 
-//    User* user = calloc(1, sizeof(User));
     iResult = processAuth(&CURRENT_USER);
 
     if (iResult == INVALID_SOCKET_PROCESS_AUTH_RESULT) {
@@ -531,26 +552,30 @@ int main() {
     printf("[main] Authorized is SUCCESS\n\n");
 
     Sleep(1000);
-    MOVE_CURSOR_UP(7);
+    MOVE_CURSOR_UP(7llu);
     ERASE_FROM_CURSOR_UNTIL_END_OF_SCREEN;
 
     printf("[main] Welcome \"%s\", to game! Press any button to play...\n", CURRENT_USER.login);
     getch();
 
-    MOVE_CURSOR_UP(1);
+    MOVE_CURSOR_UP(1llu);
     ERASE_FROM_CURSOR_UNTIL_END_OF_SCREEN;
 
     while (CURRENT_SCENE != EXIT_SCENE) {
         if (CURRENT_SCENE == MAIN_MENU_SCENE) {
             mainMenuSceneIteration();
         }
-
-        if (CURRENT_SCENE == SINGLEPLAYER_SCENE) {
-
+        else if (CURRENT_SCENE == PVP_SINGLEPLAYER_SCENE) {
+            printf("PVP singleplayer");
+            Sleep(10000);
         }
-
-        if (CURRENT_SCENE == SERVER_SCENE) {
-
+        else if (CURRENT_SCENE == PVE_SINGLEPLAYER_SCENE) {
+            printf("PVE singleplayer");
+            Sleep(10000);
+        }
+        else if (CURRENT_SCENE == SERVER_SCENE) {
+            printf("Current server: %s\n", CURRENT_GAME_SERVER.serverName);
+            Sleep(10000);
         }
     }
 
