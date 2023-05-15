@@ -56,7 +56,7 @@ void connectionLoop(Connection* connection) {
         char* rpcCommand = Binary_readString(clientPacket, &rpcCommandSize);
 
 
-        printfForConnection(connection, "Handle rpc command from client socket: %s\n", rpcCommand);
+        printfForConnection(connection, "Handle rpc command from client socket: %s", rpcCommand);
 
         if (strcmp(rpcCommand, "rpc:create_game_server") == 0) {
             size_t serverNameSize;
@@ -74,7 +74,7 @@ void connectionLoop(Connection* connection) {
             Binary_writeInt(serverPacket, 0);
             Binary_writeGameServer(serverPacket, gameServer);
 
-            printf("[client %u] Create server: %s (%zu) %zub\n", connection->socket, gameServer->serverName, gameServer->id, clientPacket->writeIndex);
+            printf("[client %u] Create server: %s (%zu) %zub", connection->socket, gameServer->serverName, gameServer->id, clientPacket->writeIndex);
 
             if (send(connection->socket, serverPacket->buffer, serverPacket->writeIndex, 0) == -1) {
                 break;
@@ -135,7 +135,6 @@ void connectionLoop(Connection* connection) {
         }
         else if (strcmp(rpcCommand, "rpc:get_game_servers") == 0) {
             Binary_clear(clientPacket);
-            Sleep(1000);
 
             Binary_writeSizeT(clientPacket, GAME_SERVER_VEC.length);
 
@@ -263,16 +262,12 @@ void* connectionsHealthCheckThread(void *arg) {
 
         timestamp = time(NULL);
 
-        printf("[Connections health check THREAD] start\n");
-
         int index;
         Connection* connection;
 
         vec_foreach(&CONNECTIONS_VEC, connection, index) {
             printf("[Connections health check THREAD] check socket %lli\n", connection->socket);
         }
-
-        printf("[Connections health check THREAD] end\n");
     }
 
 }
