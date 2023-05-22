@@ -13,4 +13,7 @@
 #define ERASE_FROM_CURSOR_TO_BEGINNING_OF_SCREEN printf("\x1b[1J")
 #define ERASE_ENTIRE_SCREEN printf("\x1b[2J")
 
+#define SAVE_CURSOR_POSITION_1 printf("\033[s")
+#define RESTORES_CURSOR_POSITION_1 printf("\033[u")
+
 #endif //CURSOR_H

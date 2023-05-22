@@ -85,7 +85,7 @@ void Binary_readSizeT(Binary* binary, size_t* outValue) {
 }
 
 void Binary_writeString(Binary* binary, char* value) {
-    size_t valueSize = strlen(value) + 1;
+    size_t valueSize = strlen(value);
     Binary_writeSizeT(binary, valueSize);
     Binary_write(binary, value, valueSize);
 }

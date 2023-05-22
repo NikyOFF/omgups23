@@ -25,11 +25,43 @@ SOCKET CLIENT_SOCKET = INVALID_SOCKET;
 size_t CURRENT_SCENE = MAIN_MENU_SCENE;
 size_t CURRENT_MENU = MAIN_MENU_MENU;
 User CURRENT_USER;
+
+bool IS_SERVER_OWNER = false;
 GameServer CURRENT_GAME_SERVER;
 
 
 void handleSocketError() {
 
+}
+
+typedef struct RGBStruct {
+    unsigned char red;
+    unsigned char green;
+    unsigned char blue;
+} RGB;
+
+void printfWithRGBColor(
+        RGB backgroundColor,
+        RGB foregroundColor,
+        const char* format,
+        ...
+) {
+    HANDLE consoleOutput = GetStdHandle(STD_OUTPUT_HANDLE);
+
+    printf(
+            "\x1b[48;2;%u;%u;%um\x1b[38;2;%u;%u;%um",
+            backgroundColor.red,
+            backgroundColor.green,
+            backgroundColor.blue,
+            foregroundColor.red,
+            foregroundColor.green,
+            foregroundColor.blue
+    );
+    va_list args;
+    va_start(args, format);
+    vfprintf(stdout, format, args);
+    va_end(args);
+    SetConsoleTextAttribute(consoleOutput, 7);
 }
 
 void printfWithColor(const WORD wAttributes, const char* format, ...) {
@@ -42,6 +74,7 @@ void printfWithColor(const WORD wAttributes, const char* format, ...) {
     va_end(args);
     SetConsoleTextAttribute(consoleOutput, 7);
 }
+
 
 void printSelectMenu(char** items, size_t itemsSize, size_t selectedIndex) {
 
@@ -59,8 +92,84 @@ void printSelectMenu(char** items, size_t itemsSize, size_t selectedIndex) {
 
         printf("\n");
     }
+}
+
+typedef struct SelectMenuOptionsStruct {
+    size_t itemsSize;
+    char** items;
+    bool* lockedItems;
+
+    RGB selectedColor;
+    RGB selectedBackgroundColor;
+
+    RGB lockedColor;
+    RGB lockedBackgroundColor;
+
+    RGB selectedLockedColor;
+    RGB selectedLockedBackgroundColor;
+} SelectMenuOptions;
+
+void printSelectMenu2(SelectMenuOptions options, size_t selectedIndex) {
+    for (size_t index = 0; index < options.itemsSize; index++) {
+        char* item = options.items[index];
+
+        printf("%zu.", index+1);
+
+        if (index == selectedIndex) {
+
+            if (options.lockedItems[index] == true) {
+                printfWithRGBColor(
+                        options.selectedLockedBackgroundColor,
+                        options.selectedLockedColor,
+                        " %s ",
+                        item
+                );
+            }
+            else {
+                printfWithRGBColor(
+                        options.selectedBackgroundColor,
+                        options.selectedColor,
+                        " %s ",
+                        item
+                );
+            }
+        }
+        else if (options.lockedItems[index] == true) {
+            printfWithRGBColor(
+                    options.lockedBackgroundColor,
+                    options.lockedColor,
+                    " %s ",
+                    item
+            );
+        }
+        else {
+            printf(" %s ", item);
+        }
+
+        printf("\n");
+    }
 
 }
+
+const RGB WHITE_COLOR = {255, 255, 255};
+
+const RGB SELECTED_COLOR = {0, 0, 0};
+const RGB SELECTED_BACKGROUND_COLOR = {200, 200, 200};
+
+const RGB LOCKED_COLOR = {0, 0, 0};
+const RGB LOCKED_BACKGROUND_COLOR = {100, 100, 100};
+
+const RGB SELECTED_LOCKED_COLOR = {200, 200, 200};
+const RGB SELECTED_LOCKED_BACKGROUND_COLOR = {120, 120, 120};
+
+
+const RGB TEAM_UNIT_COLOR = {0, 180, 0};
+const RGB SELECTED_TEAM_UNIT_COLOR = {0, 255, 0};
+
+const RGB ENEMY_TEAM_UNIT_COLOR = {180, 0, 0};
+const RGB SELECTED_ENEMY_TEAM_UNIT_COLOR = {255, 0, 0};
+
+
 
 int connectToServer() {
     int iResult;
@@ -109,47 +218,6 @@ int connectToServer() {
     return 0;
 }
 
-int receiveServerPacket(SOCKET socket, Binary* serverPacket, int flags) {
-    size_t defaultReadIndex = serverPacket->readIndex;
-
-    int recvResult;
-    bool flag = true;
-
-    while(flag == true) {
-        Binary_clear(&serverPacket);
-        recvResult = recv(CLIENT_SOCKET, serverPacket->buffer, serverPacket->bufferSize, flags);
-
-        if (recvResult == -1) {
-            return -1;
-        }
-
-        if (recvResult == SERVER_SOCKET_PING_PACKET_SIZE) {
-            size_t strSize;
-            char* str = Binary_readString(&serverPacket, &strSize);
-
-            if (strSize == SERVER_SOCKET_PING_PACKET_MESSAGE_SIZE && strcmp(str, SERVER_SOCKET_PING_PACKET_MESSAGE) == 0) {
-                Binary clientPacket = *Binary_constructor(CLIENT_SOCKET_PING_PACKET_SIZE);
-                Binary_writeString(&clientPacket, CLIENT_SOCKET_PING_PACKET_MESSAGE);
-
-                int iResult = send(CLIENT_SOCKET, clientPacket.buffer, CLIENT_SOCKET_PING_PACKET_SIZE, 0);
-
-                Sleep(100);
-                free(clientPacket.buffer);
-
-                if (iResult == -1) {
-                    return -1;
-                }
-
-                continue;
-            }
-        }
-
-        flag = false;
-    }
-
-    serverPacket->readIndex = defaultReadIndex;
-    return recvResult;
-}
 
 int processAuth(User* outUser) {
     int iResult;
@@ -275,7 +343,7 @@ void multiplayerMenuIteration() {
         switch(getch()) {
             case 'w':
             case 72:
-                selectedIndex = selectedIndex == 0 ? 0 : selectedIndex - 1;
+                selectedIndex = selectedIndex == 0 ? itemsSize - 1 : selectedIndex - 1;
                 break;
             case 's':
             case 80:
@@ -306,6 +374,8 @@ void multiplayerMenuIteration() {
                         return;
                     }
 
+                    IS_SERVER_OWNER = true;
+                    memcpy(&CURRENT_GAME_SERVER, &gameServer, sizeof(GameServer));
                     CURRENT_SCENE = SERVER_SCENE;
                     return;
                 }
@@ -335,7 +405,7 @@ void singleplayerMenuIteration() {
         switch(getch()) {
             case 'w':
             case 72:
-                selectedIndex = selectedIndex == 0 ? 0 : selectedIndex - 1;
+                selectedIndex = selectedIndex == 0 ? itemsSize - 1 : selectedIndex - 1;
                 break;
             case 's':
             case 80:
@@ -373,7 +443,7 @@ void startNewGameMenuIteration() {
         switch(getch()) {
             case 'w':
             case 72:
-                selectedIndex = selectedIndex == 0 ? 0 : selectedIndex - 1;
+                selectedIndex = selectedIndex == 0 ? itemsSize - 1 : selectedIndex - 1;
                 break;
             case 's':
             case 80:
@@ -417,7 +487,7 @@ void statisticsMenuIteration() {
         switch(getch()) {
             case 'w':
             case 72:
-                selectedIndex = selectedIndex == 0 ? 0 : selectedIndex - 1;
+                selectedIndex = selectedIndex == 0 ? itemsSize - 1 : selectedIndex - 1;
                 break;
             case 's':
             case 80:
@@ -450,7 +520,7 @@ void mainMenuIteration() {
         switch(getch()) {
             case 'w':
             case 72:
-                selectedIndex = selectedIndex == 0 ? 0 : selectedIndex - 1;
+                selectedIndex = selectedIndex == 0 ? itemsSize - 1 : selectedIndex - 1;
                 break;
             case 's':
             case 80:
@@ -508,8 +578,341 @@ void mainMenuSceneIteration() {
     }
 }
 
+
+typedef struct UnitStruct {
+    size_t power;
+} Unit;
+
+Unit* Unit_constructor(size_t power) {
+    Unit* unit = calloc(1, sizeof(Unit));
+
+    unit->power = power;
+
+    return unit;
+}
+
+void Unit_deconstructor(Unit* unit) {
+    free(unit);
+}
+
+int attackUnit(Unit* unit, Unit* target) {
+    if (unit->power == 0) {
+        return 1;
+    }
+
+    if (target->power == 0) {
+        return 2;
+    }
+
+    size_t attackPower = (rand() % unit->power) + 1;
+    size_t protectionPower = (rand() % target->power) + 1;
+
+    if (attackPower < protectionPower) {
+        unit->power -= attackPower;
+        target->power += attackPower;
+    }
+    else if (protectionPower < attackPower) {
+        target->power -= protectionPower;
+        unit->power += protectionPower;
+    }
+    else {
+        size_t side = rand() % 2;
+
+        if (side == 0) {
+            unit->power -= attackPower;
+            target->power += attackPower;
+        }
+        else {
+            target->power -= protectionPower;
+            unit->power += protectionPower;
+        }
+    }
+
+    return 0;
+}
+
+typedef struct TeamStruct {
+    char* name;
+    size_t unitsLength;
+    Unit** units;
+} Team;
+
+Team* Team_constructor(char* name, size_t unitsLength) {
+    Team* team = calloc(2, sizeof(Team));
+
+    char* nameCopy = calloc(strlen(name), sizeof(char));
+    strcpy(nameCopy, name);
+
+    team->name = nameCopy;
+    team->unitsLength = unitsLength;
+    team->units = calloc(unitsLength, sizeof(Unit*));
+
+    for (size_t index = 0; index < unitsLength; index++) {
+        team->units[index] = Unit_constructor(1);
+    }
+
+    return team;
+}
+
+void Team_deconstructor(Team* team) {
+    for (size_t index = 0; index < team->unitsLength; index++) {
+        free(team->units[index]);
+    }
+
+    free(team->name);
+    free(team->units);
+    free(team);
+}
+
+
+#define MAX_TEAM_NAME_LENGTH 50
+
+void printTeams(
+        Team** teams,
+        size_t numberOfTeams,
+        size_t numberOfUnitsInTeams,
+        size_t currentTeamIndex,
+        size_t selectedUnit,
+        size_t enemyTeamIndex,
+        size_t unitToAttack
+) {
+
+    for (size_t teamIndex = 0; teamIndex < numberOfTeams; teamIndex++) {
+        Team* team = teams[teamIndex];
+
+        for (size_t unitIndex = 0; unitIndex < numberOfUnitsInTeams; unitIndex++) {
+            Unit* unit = team->units[unitIndex];
+
+            if (currentTeamIndex != -1 && currentTeamIndex == teamIndex) {
+                printfWithRGBColor(
+                    selectedUnit != -1 && selectedUnit == unitIndex ? SELECTED_TEAM_UNIT_COLOR : TEAM_UNIT_COLOR,
+                    WHITE_COLOR,
+                    " [%llu] ",
+                    unit->power
+                );
+
+                continue;
+            }
+
+            if (enemyTeamIndex != -1 && enemyTeamIndex == teamIndex) {
+                printfWithRGBColor(
+                    unitToAttack != -1 && unitToAttack == unitIndex ? SELECTED_ENEMY_TEAM_UNIT_COLOR : ENEMY_TEAM_UNIT_COLOR,
+                    WHITE_COLOR,
+                    " [%llu] ",
+                    unit->power
+                );
+
+                continue;
+            }
+
+            printf(" [%llu] ", unit->power);
+
+        }
+
+        if (currentTeamIndex != -1 && currentTeamIndex == teamIndex) {
+            printfWithColor(BACKGROUND_RED | BACKGROUND_GREEN | BACKGROUND_BLUE | 0x80, "   (%llu) Team \"%s\" \n\n", teamIndex, team->name);
+        }
+        else {
+            printf("   (%llu) Team \"%s\" \n\n", teamIndex, team->name);
+        }
+    }
+
+    printf("----------------------------------------------------------------------------------------------------------------------------\n\n");
+
+}
+
+void pvpSingleplayerGameLoop() {
+    Team** teams;
+    size_t numberOfTeams;
+    size_t numberOfUnitsInTeams;
+
+    printf("Enter the number of teams: ");
+    scanf("%llu", &numberOfTeams);
+
+    printf("Enter the number of units in teams: ");
+    scanf("%llu", &numberOfUnitsInTeams);
+
+    teams = calloc(numberOfTeams, sizeof(Team*));
+
+    for (size_t index = 0; index < numberOfTeams; index++) {
+        char name[MAX_TEAM_NAME_LENGTH];
+        printf("Enter the name for team #%llu: ", index + 1);
+        scanf("%s", name);
+
+        teams[index] = Team_constructor(name, numberOfUnitsInTeams);
+    }
+
+    Sleep(1000);
+    MOVE_CURSOR_UP(numberOfTeams + 2);
+    ERASE_FROM_CURSOR_UNTIL_END_OF_SCREEN;
+
+    size_t currentTeamIndex = 0;
+
+    while (true) {
+        size_t currentUnitIndex = -1;
+        size_t enemyTeamIndex = -1;
+        size_t enemyUnitIndex = -1;
+
+        char* items[6] = {
+                "Select unit for attack",
+                "Select team to attack",
+                "Select unit to attack",
+                "Attack enemy",
+                "Skip round",
+                "Stop game"
+        };
+
+        size_t itemsSize = 6;
+        size_t selectedIndex = 0;
+
+        bool teamsDirty = true;
+
+        while(1) {
+            if (teamsDirty == true) {
+                teamsDirty = false;
+                printf("Round for team \"%s\" (#%llu)\n", teams[currentTeamIndex]->name, currentTeamIndex + 1);
+
+                printTeams(
+                    teams,
+                    numberOfTeams,
+                    numberOfUnitsInTeams,
+                    currentTeamIndex,
+                    currentUnitIndex,
+                    enemyTeamIndex,
+                    enemyUnitIndex
+                );
+            }
+
+            bool lockedItems[6] = {
+                false,
+                false,
+                enemyTeamIndex == -1,
+                currentUnitIndex == -1 || enemyTeamIndex == -1 || enemyUnitIndex == -1,
+                false,
+                false
+            };
+
+            //print menu
+            SelectMenuOptions options = {
+                    itemsSize,
+                    items,
+                    lockedItems,
+
+                    SELECTED_COLOR,
+                    SELECTED_BACKGROUND_COLOR,
+
+                    LOCKED_COLOR,
+                    LOCKED_BACKGROUND_COLOR,
+
+                    SELECTED_LOCKED_COLOR,
+                    SELECTED_LOCKED_BACKGROUND_COLOR
+            };
+
+            printSelectMenu2(options, selectedIndex);
+
+            MOVE_CURSOR_UP(itemsSize);
+            char input = getch();
+
+            if (input == 'w' || input == 72) {
+                selectedIndex = selectedIndex == 0 ? itemsSize - 1 : selectedIndex - 1;
+            }
+            else if (input == 's' || input == 80) {
+                selectedIndex = selectedIndex + 1 >= itemsSize ? 0 : selectedIndex + 1;
+            }
+            else if (input == '\n' || input == 13 || input == 100) {
+                ERASE_FROM_CURSOR_UNTIL_END_OF_SCREEN;
+
+                if (selectedIndex == 0) {
+                    printf("Enter index (0 <= index < %llu) of unit for attack: ", numberOfUnitsInTeams);
+                    scanf("%llu", &currentUnitIndex);
+
+                    MOVE_CURSOR_UP((numberOfTeams * 2) + 4);
+                    ERASE_FROM_CURSOR_UNTIL_END_OF_SCREEN;
+                    teamsDirty = true;
+                }
+
+                if (selectedIndex == 1) {
+                    printf("Enter index (0 <= index < %llu) of enemy team: ", numberOfTeams);
+                    scanf("%llu", &enemyTeamIndex);
+
+                    MOVE_CURSOR_UP((numberOfTeams * 2) + 4);
+                    ERASE_FROM_CURSOR_UNTIL_END_OF_SCREEN;
+                    teamsDirty = true;
+                }
+
+                if (selectedIndex == 2 && lockedItems[2] == false) {
+                    printf("Enter index (0 <= index < %llu) of unit to attack: ", numberOfUnitsInTeams);
+                    scanf("%llu", &enemyUnitIndex);
+
+                    MOVE_CURSOR_UP((numberOfTeams * 2) + 4);
+                    ERASE_FROM_CURSOR_UNTIL_END_OF_SCREEN;
+                    teamsDirty = true;
+                }
+
+                if (selectedIndex == 3 && lockedItems[3] == false) {
+                    printf("Attack team (%llu) enemy (%llu)\n", enemyTeamIndex, enemyUnitIndex);
+                    Sleep(1000);
+
+                    attackUnit(teams[currentTeamIndex]->units[currentUnitIndex], teams[enemyTeamIndex]->units[enemyUnitIndex]);
+
+                    currentUnitIndex = -1;
+                    enemyTeamIndex = -1;
+                    enemyUnitIndex = -1;
+                    selectedIndex = 0;
+
+                    currentTeamIndex++;
+                    currentTeamIndex = currentTeamIndex >= numberOfTeams ? 0 : currentTeamIndex;
+
+                    MOVE_CURSOR_UP((numberOfTeams * 2) + 4);
+                    ERASE_FROM_CURSOR_UNTIL_END_OF_SCREEN;
+                    teamsDirty = true;
+                }
+
+                if (selectedIndex == 4) {
+                    printf("Skip round\n");
+                    currentTeamIndex++;
+                    currentTeamIndex = currentTeamIndex >= numberOfTeams ? 0 : currentTeamIndex;
+
+                    currentUnitIndex = -1;
+                    enemyTeamIndex = -1;
+                    enemyUnitIndex = -1;
+                    selectedIndex = 0;
+
+                    MOVE_CURSOR_UP((numberOfTeams * 2) + 4);
+                    ERASE_FROM_CURSOR_UNTIL_END_OF_SCREEN;
+                    teamsDirty = true;
+                }
+
+                if (selectedIndex == 5) {
+                    printf("Exit from game\n");
+
+                    MOVE_CURSOR_UP((numberOfTeams * 2) + 4);
+                    ERASE_FROM_CURSOR_UNTIL_END_OF_SCREEN;
+                    teamsDirty = true;
+
+                    return;
+                }
+            }
+        }
+    }
+
+    Sleep(5000);
+
+    for (size_t index = 0; index < numberOfTeams; index++) {
+        Team_deconstructor(teams[index]);
+    }
+
+    free(teams);
+}
+
+void pveSingleplayerGameLoop() {
+
+}
+
 int main() {
     ERASE_DISPLAY;
+
+    srand(time(NULL));
 
     printf(" ________  ________  _____ ______   _______           ________  ________      _________  ___  ___  _______           _________  _______   ________  _____ ______   ________      \n"
            "|\\   ____\\|\\   __  \\|\\   _ \\  _   \\|\\  ___ \\         |\\   __  \\|\\  _____\\    |\\___   ___\\\\  \\|\\  \\|\\  ___ \\         |\\___   ___\\\\  ___ \\ |\\   __  \\|\\   _ \\  _   \\|\\   ____\\     \n"
@@ -566,16 +969,33 @@ int main() {
             mainMenuSceneIteration();
         }
         else if (CURRENT_SCENE == PVP_SINGLEPLAYER_SCENE) {
-            printf("PVP singleplayer");
-            Sleep(10000);
+            pvpSingleplayerGameLoop();
+
+            CURRENT_SCENE = MAIN_MENU_SCENE;
+            CURRENT_MENU = MAIN_MENU_MENU;
         }
         else if (CURRENT_SCENE == PVE_SINGLEPLAYER_SCENE) {
             printf("PVE singleplayer");
+
             Sleep(10000);
+            CURRENT_SCENE = MAIN_MENU_SCENE;
+            CURRENT_MENU = MAIN_MENU_MENU;
         }
         else if (CURRENT_SCENE == SERVER_SCENE) {
+            if (IS_SERVER_OWNER == true) {
+
+            }
+            else {
+                int result = rpcConnectionToServer(CLIENT_SOCKET, CURRENT_GAME_SERVER.id);
+            }
+
+
+
             printf("Current server: %s\n", CURRENT_GAME_SERVER.serverName);
-            Sleep(10000);
+
+            Sleep(10000000);
+            CURRENT_SCENE = MAIN_MENU_SCENE;
+            CURRENT_MENU = MAIN_MENU_MENU;
         }
     }
 
@@ -583,5 +1003,6 @@ int main() {
     closesocket(CLIENT_SOCKET);
     WSACleanup();
 
+    ERASE_DISPLAY;
     return 0;
 }

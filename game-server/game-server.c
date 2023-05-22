@@ -64,32 +64,18 @@ int rpcCreateGameServer(SOCKET socket, char* serverName, GameServer* outGameServ
         return 1;
     }
 
-    GameServer gameServer = *Binary_readGameServer(&binary);
+    GameServer* gameServer = Binary_readGameServer(&binary);
 
-    memcpy(outGameServer, &gameServer, sizeof(gameServer));
+    memcpy(outGameServer, &gameServer, sizeof(GameServer));
 
-    printf("Create new game server \"%s\" (%zu)\n", gameServer.serverName, gameServer.id);
+    printf("Create new game server \"%s\" (%zu)\n", gameServer->serverName, gameServer->id);
     printf("Waiting player...\n");
     Binary_clear(&binary);
 
     iResult = recv(socket, binary.buffer, binary.bufferSize, 0);
 
-    if (iResult == -1) {
-        return 2;
-    }
+    printf("Awaited user info\n");
 
-    if (iResult < 1) {
-        return 1;
-    }
-
-    Binary_readInt(&binary, &iResult);
-
-    if (iResult != 0) {
-        return 1;
-    }
-
-    Binary_clear(&binary);
-    iResult = recv(socket, binary.buffer, binary.bufferSize, 0);
     User* user = Binary_readUser(&binary);
 
     if (iResult == -1) {
@@ -102,6 +88,7 @@ int rpcCreateGameServer(SOCKET socket, char* serverName, GameServer* outGameServ
 
     printf("User \"%s\" join to server!\n", user->login);
 
+    free(gameServer);
     free(binary.buffer);
     return 0;
 }
