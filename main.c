@@ -2,205 +2,57 @@
 
 #pragma comment(lib, "Ws2_32.lib")
 
-SOCKET SERVER_SOCKET = INVALID_SOCKET;
-pthread_mutex_t GENERAL_AUTH_MUTEX;
-
-pthread_mutex_t CONNECTIONS_MUTEX;
-Connection_vec_t CONNECTIONS_VEC;
-
-size_t LAST_GAME_SERVER_ID = 0;
-pthread_mutex_t GAME_SERVERS_MUTEX;
-GameServer_vec_t GAME_SERVER_VEC;
-
-Connection* getConnectionBySocket(SOCKET* socket) {
-    int index;
-    Connection* connection;
-
-    vec_foreach(&CONNECTIONS_VEC, connection, index) {
-        if (&connection->socket == socket) {
-            return connection;
-        }
-    }
-
-    return NULL;
-}
-
-GameServer* getGameServerById(size_t id) {
-    int index;
-    GameServer* gameServer;
-
-    vec_foreach(&GAME_SERVER_VEC, gameServer, index) {
-        if (gameServer->id == id) {
-            return gameServer;
-        }
-    }
-
-    return NULL;
-}
 
 void connectionLoop(Connection* connection) {
-    int iResult;
+    int iResult = 0;
     Binary* clientPacket = Binary_constructor(512);
 
-    while (connection->socket != INVALID_SOCKET) {
-        Binary_clear(clientPacket);
+    while (connection->socket != INVALID_SOCKET || iResult == 0) {
+        Binary_clear(clientPacket); //clear binary before receive new data
 
         printfForConnection(connection, "Wait rpc command from client socket");
-        iResult = recv(connection->socket, clientPacket->buffer, 512, 0);
+        iResult = recv(connection->socket, clientPacket->buffer, 512, 0); //receive data from socket
 
-        if (iResult == -1) {
+        //handle socket error or zero bytes
+        if (iResult == SOCKET_ERROR || iResult == 0) {
             break;
         }
 
-        size_t rpcCommandSize;
-        char* rpcCommand = Binary_readString(clientPacket, &rpcCommandSize);
+        connection->lastHealthCheck = time(NULL); //set last health check
+
+        size_t rpcCommandSize; //size for rpc command string
+        char* rpcCommandName = Binary_readString(clientPacket, &rpcCommandSize); //read "rpc command name" from binary
 
 
-        printfForConnection(connection, "Handle rpc command from client socket: %s", rpcCommand);
+        printfForConnection(connection, "Handle rpc command from client socket: %s (%ib)", rpcCommandName, iResult);
 
-        if (strcmp(rpcCommand, "rpc:create_game_server") == 0) {
-            size_t serverNameSize;
-            char* serverName = Binary_readString(clientPacket, &serverNameSize);
 
-            GameServer* gameServer = GameServer_constructor(LAST_GAME_SERVER_ID, serverName, connection->socket);
-            LAST_GAME_SERVER_ID++;
+        //Handle rpc commands
 
-            pthread_mutex_lock(&GAME_SERVERS_MUTEX);
-            vec_push(&GAME_SERVER_VEC, gameServer);
-            pthread_mutex_unlock(&GAME_SERVERS_MUTEX);
-
-            Binary* serverPacket = Binary_constructor(512);
-
-            Binary_writeInt(serverPacket, 0);
-            Binary_writeGameServer(serverPacket, gameServer);
-
-            printf("[client %u] Create server: %s (%zu) %zub", connection->socket, gameServer->serverName, gameServer->id, clientPacket->writeIndex);
-
-            if (send(connection->socket, serverPacket->buffer, serverPacket->writeIndex, 0) == -1) {
-                break;
-            }
-
-            //wait connection to server
-            pthread_mutex_lock(&gameServer->_serverMutex);
-            pthread_cond_wait(&gameServer->_connectionRequest, &gameServer->_serverMutex);
-            pthread_mutex_unlock(&gameServer->_serverMutex);
-
-            Binary_clear(serverPacket);
-            Binary_writeInt(serverPacket, 0);
-
-            if (send(connection->socket, clientPacket->buffer, clientPacket->writeIndex, 0) == -1) {
-                break;
-            }
-
-            pthread_mutex_lock(&GAME_SERVERS_MUTEX);
-            vec_remove(&GAME_SERVER_VEC, gameServer);
-            pthread_mutex_unlock(&GAME_SERVERS_MUTEX);
-
-            Binary_deconstructor(serverPacket);
-            //get another connection
+        if (strcmp(rpcCommandName, CREATE_GAME_SERVER_RPC_COMMAND) == 0) {
+            iResult = handleCreateGameServerRpcCommand(connection, clientPacket);
+            continue;
         }
-        else if (strcmp(rpcCommand, "rpc:connect_to_server") == 0) {
-            size_t gameServerId;
-            Binary_readSizeT(clientPacket, &gameServerId);
 
-            GameServer* gameServer = getGameServerById(gameServerId);
-
-            iResult = gameServer == NULL;
-
-            Binary_clear(clientPacket);
-            Binary_writeInt(clientPacket, iResult);
-
-            if (send(connection->socket, clientPacket->buffer, clientPacket->writeIndex, 0) == -1) {
-                break;
-            }
-
-            if (iResult != 0) {
-                printf("[client %u] Cannot connect to server with id: %zu\n", connection->socket, gameServerId);
-                continue;
-            }
-
-            pthread_mutex_lock(&gameServer->_serverMutex);
-            pthread_cond_signal(&gameServer->_connectionRequest);
-            pthread_mutex_unlock(&gameServer->_serverMutex);
-
-            printf("[client %u] Connect to server: %s (%zu) [client %u]\n", connection->socket, gameServer->serverName, gameServer->id, gameServer->_owner);
-
-
-            Binary_clear(clientPacket);
-            Binary_writeUser(clientPacket, connection->user);
-
-            if (send(gameServer->_owner, clientPacket->buffer, clientPacket->writeIndex, 0) == -1) {
-                break;
-            }
+        if (strcmp(rpcCommandName, CONNECT_TO_SERVER_RPC_COMMAND) == 0) {
+            iResult = handleConnectToServerRpcCommand(connection, clientPacket);
+            continue;
         }
-        else if (strcmp(rpcCommand, "rpc:get_game_servers") == 0) {
-            Binary_clear(clientPacket);
 
-            Binary_writeSizeT(clientPacket, GAME_SERVER_VEC.length);
-
-            int index;
-            GameServer* gameServer;
-
-            vec_foreach(&GAME_SERVER_VEC, gameServer, index) {
-                Binary_writeGameServer(clientPacket, gameServer);
-            }
-
-            if (send(connection->socket, clientPacket->buffer, clientPacket->writeIndex, 0) == -1) {
-                break;
-            }
+        if (strcmp(rpcCommandName, GET_GAME_SERVERS_RPC_COMMAND) == 0) {
+            iResult = handleGetGameServersRpcCommand(connection, clientPacket);
+            continue;
         }
     }
 
-    Binary_deconstructor(clientPacket);
+    Binary_deconstructor(clientPacket); //deconstruct binary
 }
 
-
-void printfForConnection(const Connection* connection, const char* format, ...) {
-    HANDLE consoleOutput = GetStdHandle(STD_OUTPUT_HANDLE);
-
-    va_list args;
-    fprintf(stdout, "[Client %llu THREAD]: ", connection->socket);
-    va_start(args, format);
-    vfprintf(stdout, format, args);
-    va_end(args);
-    fprintf(stdout, "\n");
-}
-
-
-void onDisconnect(Connection* connection) {
-    printfForConnection(connection, "Close connection...");
-
-    pthread_mutex_lock(&CONNECTIONS_MUTEX);
-    vec_remove(&CONNECTIONS_VEC, connection);
-    pthread_mutex_unlock(&CONNECTIONS_MUTEX);
-
-    pthread_mutex_lock(&GAME_SERVERS_MUTEX);
-    int index;
-    GameServer* gameServer;
-    vec_foreach(&GAME_SERVER_VEC, gameServer, index) {
-            if (gameServer->_owner != connection->socket) {
-                continue;
-            }
-
-            vec_remove(&GAME_SERVER_VEC, gameServer);
-        }
-    pthread_mutex_unlock(&GAME_SERVERS_MUTEX);
-
-    closesocket(connection->socket);
-}
-
-void* handleSocketError(Connection* connection) {
-    onDisconnect(connection);
-    printfForConnection(connection, "User disconnected!");
-
-    pthread_exit(0);
-    return NULL;
-}
-
-
-void* onConnection2(void* arg) {
+void* onConnection(void* arg) {
     Connection* connection = (Connection *) arg;
     int iResult;
+
+    connection->lastHealthCheck = time(NULL);
 
     ClientAuthPacket authPacket;
     iResult = receiveAuthPacket(connection, &authPacket);
@@ -240,6 +92,7 @@ void* onConnection2(void* arg) {
     pthread_mutex_lock(&CONNECTIONS_MUTEX);
     connection->user = &currentUser;
     connection->connectionState = AUTHORIZED_CONNECTION_STATE;
+    connection->lastHealthCheck = time(NULL);
     pthread_mutex_unlock(&CONNECTIONS_MUTEX);
 
     printfForConnection(connection, "User \"%s\" connected!", connection->user->login);
@@ -252,21 +105,76 @@ void* onConnection2(void* arg) {
     pthread_exit(0);
 }
 
+
+
+#define SERVER_SOCKET_PING_PACKET_MESSAGE "SERVER_PING"
+#define SERVER_SOCKET_PING_PACKET_MESSAGE_SIZE 12
+#define SERVER_SOCKET_PING_PACKET_SIZE 20
+
+#define CLIENT_SOCKET_PING_PACKET_MESSAGE "CLIENT_PONG"
+#define CLIENT_SOCKET_PING_PACKET_SIZE 20
+
+int sendHealthCheckPacket(Connection* connection) {
+    Binary* binary = Binary_constructor(SERVER_SOCKET_PING_PACKET_SIZE);
+    Binary_writeString(binary, SERVER_SOCKET_PING_PACKET_MESSAGE);
+
+    int result = send(connection->socket, binary->buffer, binary->writeIndex, 0);
+
+    if (result == SOCKET_ERROR) {
+        free(binary->buffer);
+        return -1;
+    }
+
+    Binary_clear(binary);
+
+    result = recv(connection->socket, binary->buffer, binary->bufferSize, 0);
+
+    if (result == SOCKET_ERROR) {
+        free(binary->buffer);
+        return -1;
+    }
+
+    if (result == CLIENT_SOCKET_PING_PACKET_SIZE) {
+        size_t strSize;
+        char *str = Binary_readString(binary, &strSize);
+
+        if (strSize == SERVER_SOCKET_PING_PACKET_MESSAGE_SIZE && strcmp(str, CLIENT_SOCKET_PING_PACKET_MESSAGE) == 0) {
+            free(binary->buffer);
+            return 0;
+        }
+    }
+
+    free(binary->buffer);
+    return -1;
+}
+
 void* connectionsHealthCheckThread(void *arg) {
-    int timestamp = time(NULL);
+    int timestamp = time(NULL) + CONNECTIONS_CHECK_DELAY_IN_SECONDS;
 
     while (1) {
-        if (time(NULL) < timestamp + CONNECTIONS_CHECK_DELAY_IN_SECONDS) {
+        long long currentTime = time(NULL);
+
+        if (currentTime < timestamp) {
             continue;
         }
 
-        timestamp = time(NULL);
+        timestamp = time(NULL) + CONNECTIONS_CHECK_DELAY_IN_SECONDS;
 
         int index;
         Connection* connection;
 
         vec_foreach(&CONNECTIONS_VEC, connection, index) {
-            printf("[Connections health check THREAD] check socket %lli\n", connection->socket);
+            printf("[Connections health check THREAD] check socket %lli [%lli]\n", connection->socket, connection->lastHealthCheck);
+
+            if (connection->connectionState == AUTHORIZATION_CONNECTION_STATE && currentTime - connection->lastHealthCheck > 60) {
+                onDisconnect(connection);
+                continue;
+            }
+
+            if (connection->connectionState == AUTHORIZED_CONNECTION_STATE, currentTime - connection->lastHealthCheck > 240) {
+                onDisconnect(connection);
+                continue;
+            }
         }
     }
 
@@ -276,7 +184,7 @@ void* consoleInputThread(void *arg) {
     char input[256];
 
     while (1) {
-        if (scanf("%256s", &input) != 1) {
+        if (scanf("%256s", input) != 1) {
             continue;
         }
 
@@ -364,7 +272,7 @@ int serverLoop() {
         pthread_attr_t attr;
         pthread_attr_init(&attr);
 
-        iResult = pthread_create(&tid, &attr, onConnection2, vec_last(&CONNECTIONS_VEC));
+        iResult = pthread_create(&tid, &attr, onConnection, vec_last(&CONNECTIONS_VEC));
 
         if (iResult != 0) {
             printf("[server] Client connected, but can`t create new thread\n");

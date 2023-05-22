@@ -6,6 +6,7 @@ Connection* Connection_constructor(SOCKET socket, ConnectionState connectionStat
     connection->socket = socket;
     connection->connectionState = connectionState;
     connection->user = user;
+    connection->lastHealthCheck = -1;
 
     return connection;
 }

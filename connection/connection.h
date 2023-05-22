@@ -14,6 +14,7 @@ typedef struct ConnectionStruct {
     SOCKET socket;
     ConnectionState connectionState;
     User* user;
+    long long lastHealthCheck;
 } Connection;
 
 Connection* Connection_constructor(SOCKET socket, ConnectionState connectionState, User* user);

@@ -1,3 +1,6 @@
+#ifndef SERVER_SERVER_H
+#define SERVER_SERVER_H
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
@@ -11,18 +14,18 @@
 #include <WS2tcpip.h>
 #include <windows.h>
 
-#include "user/user.h"
-#include "auth/auth.h"
-#include "connection/connection.h"
 #include "binary/binary.h"
 #include "game-server/game-server.h"
+#include "connection/connection.h"
+#include "user/user.h"
+#include "auth/auth.h"
 
+#include "rpc-commands/rpc-commands.h"
+
+#include "globals.h"
+#include "utils/utils.h"
 #include "packets/packets.h"
 
 
-#include "ed25519/ed25519.h"
 
-#define DEFAULT_PORT 25565
-#define CONNECTIONS_CHECK_DELAY_IN_SECONDS 10
-
-void printfForConnection(const Connection* connection, const char* format, ...);
+#endif //SERVER_SERVER_H
