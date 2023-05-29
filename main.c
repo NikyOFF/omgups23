@@ -3,7 +3,7 @@
 SOCKET CLIENT_SOCKET = INVALID_SOCKET;
 size_t CURRENT_SCENE = MAIN_MENU_SCENE;
 size_t CURRENT_MENU = MAIN_MENU_MENU;
-User CURRENT_USER;
+User CURRENT_USER = {7, "player", 1, "", 0, 0};
 bool IS_SERVER_OWNER = false;
 GameServer CURRENT_GAME_SERVER;
 
@@ -144,186 +144,139 @@ void selectServerIteration() {
         return;
     }
 
-    size_t itemsSize = gameServersSize + 1;
-    char** items = calloc(itemsSize, (sizeof(char*)));
+    size_t _menuItemsSize = gameServersSize + 1;
+    char** _menuItems = calloc(_menuItemsSize, (sizeof(char*)));
 
     for (size_t index = 0; index < gameServersSize; index++) {
         char* item = calloc(1, sizeof(char) * 100);
         sprintf(item, "server \"%s\" (id:%zu)", gameServers[index]->serverName, gameServers[index]->id);
-        items[index] = item;
+        _menuItems[index] = item;
     }
 
-    items[gameServersSize] = "back";
-    size_t selectedIndex = 0;
+    _menuItems[gameServersSize] = "back";
+    size_t _menuSelectedIndex = 0;
 
     while(1) {
-        printSelectMenu(items, itemsSize, selectedIndex);
-        MOVE_CURSOR_UP(itemsSize);
+        SELECT_MENU_BEHAVIOR() {
+            ERASE_FROM_CURSOR_UNTIL_END_OF_SCREEN;
 
-        switch(getch()) {
-            case 'w':
-            case 72:
-                selectedIndex = selectedIndex == 0 ? gameServersSize : selectedIndex - 1;
-                break;
-            case 's':
-            case 80:
-                selectedIndex = selectedIndex + 1 >= itemsSize ? 0 : selectedIndex + 1;
-                break;
-            case '\n':
-            case 13:
-            case 100:
-                ERASE_FROM_CURSOR_UNTIL_END_OF_SCREEN;
+            if (_menuSelectedIndex < gameServersSize) {
+                memcpy(&CURRENT_GAME_SERVER, gameServers[_menuSelectedIndex], sizeof(GameServer));
+                CURRENT_SCENE = SERVER_SCENE;
+            }
+            else if (_menuSelectedIndex == gameServersSize) {
+                CURRENT_MENU = MULTIPLAYER_MENU;
+            }
 
-                if (selectedIndex < gameServersSize) {
-                    memcpy(&CURRENT_GAME_SERVER, gameServers[selectedIndex], sizeof(GameServer));
-                    CURRENT_SCENE = SERVER_SCENE;
-                }
-                else if (selectedIndex == gameServersSize) {
-                    CURRENT_MENU = MULTIPLAYER_MENU;
-                }
+            free(gameServers);
+            free(_menuItems);
 
-                free(gameServers);
-                free(items);
-
-                return;
+            return;
         }
     }
 }
 
 void multiplayerMenuIteration() {
-    char* items[3] = {"create server", "select server", "back"};
-    size_t itemsSize = 3;
-    size_t selectedIndex = 0;
+    INITIALIZE_SELECT_MENU(3, 0, "create server", "select server", "back");
 
-    while(1) {
-        printSelectMenu(items, itemsSize, selectedIndex);
-        MOVE_CURSOR_UP(itemsSize);
+    while(true) {
+        SELECT_MENU_BEHAVIOR() {
+            ERASE_FROM_CURSOR_UNTIL_END_OF_SCREEN;
 
-        switch(getch()) {
-            case 'w':
-            case 72:
-                selectedIndex = selectedIndex == 0 ? itemsSize - 1 : selectedIndex - 1;
-                break;
-            case 's':
-            case 80:
-                selectedIndex = selectedIndex + 1 >= itemsSize ? 0 : selectedIndex + 1;
-                break;
-            case '\n':
-            case 13:
-            case 100:
-                ERASE_FROM_CURSOR_UNTIL_END_OF_SCREEN;
+            if (_menuSelectedIndex == 0) {
+                char serverName[50];
+                printf("server name: ");
+                scanf("%s", serverName);
 
-                if (selectedIndex == 0) {
-                    char serverName[50];
-                    printf("server name: ");
-                    scanf("%s", serverName);
+                GameServer gameServer;
+                int iResult = rpcCreateGameServer(CLIENT_SOCKET, serverName, &gameServer);
 
-                    GameServer gameServer;
-                    int iResult = rpcCreateGameServer(CLIENT_SOCKET, serverName, &gameServer);
-
-                    if (iResult == 2) {
-                        CURRENT_SCENE = EXIT_SCENE;
-                        return;
-                    }
-
-                    if (iResult == 1) {
-                        printf("Cannot create server, exit to main menu...\n");
-                        Sleep(5000);
-                        CURRENT_MENU = MAIN_MENU_MENU;
-                        return;
-                    }
-
-                    IS_SERVER_OWNER = true;
-                    memcpy(&CURRENT_GAME_SERVER, &gameServer, sizeof(GameServer));
-                    CURRENT_SCENE = SERVER_SCENE;
+                if (iResult == 2) {
+                    CURRENT_SCENE = EXIT_SCENE;
                     return;
                 }
 
-                if (selectedIndex == 1) {
-                    CURRENT_MENU = SELECT_SERVER_MENU;
+                if (iResult == 1) {
+                    printf("Cannot create server, exit to main menu...\n");
+                    Sleep(5000);
+                    CURRENT_MENU = MAIN_MENU_MENU;
+                    return;
                 }
 
-                if (selectedIndex == 2) {
-                    CURRENT_MENU = START_NEW_GAME_MENU;
-                }
-
+                IS_SERVER_OWNER = true;
+                memcpy(&CURRENT_GAME_SERVER, &gameServer, sizeof(GameServer));
+                CURRENT_SCENE = SERVER_SCENE;
                 return;
+            }
+
+            if (_menuSelectedIndex == 1) {
+                CURRENT_MENU = SELECT_SERVER_MENU;
+            }
+
+            if (_menuSelectedIndex == 2) {
+                CURRENT_MENU = START_NEW_GAME_MENU;
+            }
+
+            return;
         }
     }
 }
 
 void singleplayerMenuIteration() {
-    char* items[3] = {"play vs environment", "player vs player", "back"};
-    size_t itemsSize = 3;
-    size_t selectedIndex = 0;
+    INITIALIZE_SELECT_MENU(3, 0, "play vs environment", "player vs player", "back");
 
-    while(1) {
-        printSelectMenu(items, itemsSize, selectedIndex);
-        MOVE_CURSOR_UP(itemsSize);
+    while(true) {
+        SELECT_MENU_BEHAVIOR() {
+            ERASE_FROM_CURSOR_UNTIL_END_OF_SCREEN;
 
-        switch(getch()) {
-            case 'w':
-            case 72:
-                selectedIndex = selectedIndex == 0 ? itemsSize - 1 : selectedIndex - 1;
-                break;
-            case 's':
-            case 80:
-                selectedIndex = selectedIndex + 1 >= itemsSize ? 0 : selectedIndex + 1;
-                break;
-            case '\n':
-            case 13:
-            case 100:
-                ERASE_FROM_CURSOR_UNTIL_END_OF_SCREEN;
+            if (_menuSelectedIndex == 0) {
+                CURRENT_SCENE = PVE_SINGLEPLAYER_SCENE;
+            }
+            else if (_menuSelectedIndex == 1) {
+                CURRENT_SCENE = PVP_SINGLEPLAYER_SCENE;
+            }
+            else if (_menuSelectedIndex == 2) {
+                CURRENT_MENU = START_NEW_GAME_MENU;
+            }
 
-                if (selectedIndex == 0) {
-                    CURRENT_SCENE = PVE_SINGLEPLAYER_SCENE;
-                }
-                else if (selectedIndex == 1) {
-                    CURRENT_SCENE = PVP_SINGLEPLAYER_SCENE;
-                }
-                else if (selectedIndex == 2) {
-                    CURRENT_MENU = START_NEW_GAME_MENU;
-                }
-
-                return;
+            return;
         }
     }
 }
 
 void startNewGameMenuIteration() {
-    char* items[3] = {"singlplayer", "multiplayer", "back"};
-    size_t itemsSize = 3;
-    size_t selectedIndex = 0;
+    INITIALIZE_SELECT_MENU(3, 0, "singlplayer", "multiplayer", "back");
 
-    while(1) {
-        printSelectMenu(items, itemsSize, selectedIndex);
-        MOVE_CURSOR_UP(itemsSize);
+    bool lockedItems[3] = {
+        false,
+        true,
+        false
+    };
 
-        switch(getch()) {
-            case 'w':
-            case 72:
-                selectedIndex = selectedIndex == 0 ? itemsSize - 1 : selectedIndex - 1;
-                break;
-            case 's':
-            case 80:
-                selectedIndex = selectedIndex + 1 >= itemsSize ? 0 : selectedIndex + 1;
-                break;
-            case '\n':
-            case 13:
-            case 100:
-                ERASE_FROM_CURSOR_UNTIL_END_OF_SCREEN;
+    SelectMenuOptions options = {
+            _menuItemsSize,
+            _menuItems,
+            lockedItems,
+            SELECTED_COLOR,
+            SELECTED_BACKGROUND_COLOR,
+            LOCKED_COLOR,
+            LOCKED_BACKGROUND_COLOR,
+            SELECTED_LOCKED_COLOR,
+            SELECTED_LOCKED_BACKGROUND_COLOR
+    };
 
-                if (selectedIndex == 0) {
-                    CURRENT_MENU = SINGLEPLAYER_MENU;
-                }
-                else if (selectedIndex == 1) {
-                    CURRENT_MENU = MULTIPLAYER_MENU;
-                }
-                else if (selectedIndex == 2) {
-                    CURRENT_MENU = MAIN_MENU_MENU;
-                }
+    while(true) {
+        SELECT_MENU_2_BEHAVIOR(options) {
+            ERASE_FROM_CURSOR_UNTIL_END_OF_SCREEN;
 
-                return;
+            if (_menuSelectedIndex == 0) {
+                CURRENT_MENU = SINGLEPLAYER_MENU;
+            }
+            else if (_menuSelectedIndex == 2) {
+                CURRENT_MENU = MAIN_MENU_MENU;
+            }
+
+            return;
         }
     }
 }
@@ -335,72 +288,40 @@ void statisticsMenuIteration() {
     char defeatsItem[20];
     sprintf(defeatsItem, "defeats: %zu", CURRENT_USER.defeats);
 
-    char* items[3] = {winsItem, defeatsItem, "back"};
-    size_t itemsSize = 3;
-    size_t selectedIndex = 0;
+    INITIALIZE_SELECT_MENU(3, 0, winsItem, defeatsItem, "back");
 
-    while(1) {
-        printSelectMenu(items, itemsSize, selectedIndex);
-        MOVE_CURSOR_UP(itemsSize);
+    while(true) {
+        SELECT_MENU_BEHAVIOR() {
+            ERASE_FROM_CURSOR_UNTIL_END_OF_SCREEN;
 
-        switch(getch()) {
-            case 'w':
-            case 72:
-                selectedIndex = selectedIndex == 0 ? itemsSize - 1 : selectedIndex - 1;
-                break;
-            case 's':
-            case 80:
-                selectedIndex = selectedIndex + 1 >= itemsSize ? 0 : selectedIndex + 1;
-                break;
-            case '\n':
-            case 13:
-            case 100:
-                ERASE_FROM_CURSOR_UNTIL_END_OF_SCREEN;
-
-                if (selectedIndex == 2) {
-                    CURRENT_MENU = MAIN_MENU_MENU;
-                    return;
-                }
+            if (_menuSelectedIndex == 2) {
+                CURRENT_MENU = MAIN_MENU_MENU;
+                return;
+            }
         }
     }
 }
 
 void mainMenuIteration() {
-    char* items[3] = {"New game", "Statistic", "Exit"};
-    size_t itemsSize = 3;
-    size_t selectedIndex = 0;
+    INITIALIZE_SELECT_MENU(3, 0, "New game", "Statistic", "Exit");
 
-    while(1) {
-        printSelectMenu(items, itemsSize, selectedIndex);
-        MOVE_CURSOR_UP(itemsSize);
+    while(true) {
+        SELECT_MENU_BEHAVIOR() {
+            ERASE_FROM_CURSOR_UNTIL_END_OF_SCREEN;
 
-        switch(getch()) {
-            case 'w':
-            case 72:
-                selectedIndex = selectedIndex == 0 ? itemsSize - 1 : selectedIndex - 1;
-                break;
-            case 's':
-            case 80:
-                selectedIndex = selectedIndex + 1 >= itemsSize ? 0 : selectedIndex + 1;
-                break;
-            case '\n':
-            case 13:
-            case 100:
-                ERASE_FROM_CURSOR_UNTIL_END_OF_SCREEN;
+            if (_menuSelectedIndex == 0) {
+                CURRENT_MENU = START_NEW_GAME_MENU;
+            }
 
-                if (selectedIndex == 0) {
-                    CURRENT_MENU = START_NEW_GAME_MENU;
-                }
+            if (_menuSelectedIndex == 1) {
+                CURRENT_MENU = STATISTICS_MENU;
+            }
 
-                if (selectedIndex == 1) {
-                    CURRENT_MENU = STATISTICS_MENU;
-                }
+            if (_menuSelectedIndex == 2) {
+                CURRENT_SCENE = EXIT_SCENE;
+            }
 
-                if (selectedIndex == 2) {
-                    CURRENT_SCENE = EXIT_SCENE;
-                }
-
-                return;
+            return;
         }
     }
 }
@@ -1284,24 +1205,3 @@ int main() {
 }
 
 
-
-void example() {
-    INITIALIZE_SELECT_MENU(3, 0, "option 1", "option 2", "option 3");
-
-    while (true) {
-        SELECT_MENU_BEHAVIOR() {
-
-            if (_menuSelectedIndex == 0) {
-                //option 1
-            }
-            else if (_menuSelectedIndex == 1) {
-                //option 2
-            }
-            else {
-                //option 3
-            }
-
-            _menuSelectedIndex = 0;
-        }
-    }
-}

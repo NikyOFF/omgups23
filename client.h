@@ -46,13 +46,13 @@
 
 
 //#region bots
-#define BOT_DELAY false
+#define BOT_DELAY true
 
 #define IF_BOT_DELAY \
 if (BOT_DELAY)
 
-#define BOT_BRAIN_SPEED_MULTIPLIER BOT_DELAY ? 1 : 0
-#define DELAY_AFTER_BOT_SELECT BOT_DELAY ? 500 : 0
+#define BOT_BRAIN_SPEED_MULTIPLIER BOT_DELAY ? 1000 : 0
+#define DELAY_AFTER_BOT_SELECT BOT_DELAY ? 1500 : 0
 //#endregion
 
 
